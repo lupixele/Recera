@@ -327,6 +327,42 @@
       margin-bottom: 14px;
     }
 
+    /* Inline Timing Setting */
+    .speed-setting {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 8px;
+      padding: 9px 12px;
+      margin-bottom: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .speed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .speed-val {
+      font-weight: 700;
+      color: #38bdf8;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .speed-slider {
+      width: 100%;
+      height: 4px;
+      accent-color: #38bdf8;
+      background: #1e293b;
+      border-radius: 2px;
+      cursor: pointer;
+      outline: none;
+    }
+
     .action-btn {
       flex: 1;
       padding: 10px 0;
@@ -535,6 +571,16 @@
 
       <!-- Scrollable Drawer Content -->
       <div class="drawer-content">
+
+        <!-- Universal Speed & Timing Controller -->
+        <div class="speed-setting">
+          <div class="speed-header">
+            <span>⏱️ Solving Speed / Delay</span>
+            <span class="speed-val" id="speedDisplay">2.0s (2000ms)</span>
+          </div>
+          <input type="range" class="speed-slider" id="speedSlider" min="200" max="8000" step="100" value="2000">
+        </div>
+
         <!-- Tab 1: Live AI Solver -->
         <div class="tab-view active" id="viewLive">
           <div class="status-pill">
@@ -643,6 +689,21 @@
 
   const btnSettings    = shadow.getElementById('btnSettings');
   const footerModel    = shadow.getElementById('footerModel');
+
+  const speedSlider    = shadow.getElementById('speedSlider');
+  const speedDisplay   = shadow.getElementById('speedDisplay');
+  let currentDelayMs   = 2000;
+
+  speedSlider.addEventListener('input', (e) => {
+    currentDelayMs = parseInt(e.target.value, 10);
+    speedDisplay.textContent = `${(currentDelayMs / 1000).toFixed(1)}s (${currentDelayMs}ms)`;
+    chrome.storage.local.get(['autoassess_config'], (data) => {
+      const cfg = data.autoassess_config || {};
+      cfg.delayMs = currentDelayMs;
+      chrome.storage.local.set({ autoassess_config: cfg });
+    });
+    chrome.runtime.sendMessage({ action: 'saveConfig', config: { delayMs: currentDelayMs } }).catch(() => {});
+  });
 
   let extractedPromptText = '';
   let inPageBatchAnswers  = {};
@@ -886,17 +947,28 @@
         }
       }
 
+      // Re-navigate directly back to Question 1 so solver starts at the beginning
+      navigateToQuestion(1);
+      await sleep(350);
+
       let prompt = `Please solve all the following multiple-choice questions accurately.
 For EVERY question, provide the correct option letter (A, B, C, or D).
 
-Format your final output strictly as a list, one per line:
+IMPORTANT: Provide your final answer key inside a single triple-backtick markdown code block so it can be copied cleanly in one click, strictly formatted with one question per line:
+
+\`\`\`
 1. [Letter]
 2. [Letter]
+3. [Letter]
 ...
-(e.g.:
+\`\`\`
+
+Example:
+\`\`\`
 1. B
 2. A
-3. D)
+3. D
+\`\`\`
 
 Here are the questions:
 ==================================================\n\n`;
@@ -910,10 +982,12 @@ Here are the questions:
       });
 
       prompt += `==================================================
-Remember to output the final answer key as:
+Conclude your response with the answer key enclosed in a code block:
+\`\`\`
 1. [Letter]
 2. [Letter]
-...`;
+...
+\`\`\``;
 
       extractedPromptText = prompt;
       batchExportBadge.textContent = `✓ ${collected.length} Qs`;
@@ -1032,6 +1106,10 @@ Remember to output the final answer key as:
     isBatchFilling = true;
     isBatchPaused  = false;
 
+    // Reset view to Question 1 before starting fill loop
+    navigateToQuestion(1);
+    await sleep(400);
+
     btnBatchStart.disabled = true;
     btnBatchPause.disabled = false;
     btnBatchStop.disabled  = false;
@@ -1093,7 +1171,8 @@ Remember to output the final answer key as:
           }
         }
 
-        await sleep(1200);
+        // Apply dynamically updated delay instantly
+        await sleep(currentDelayMs);
       }
 
     } finally {
@@ -1190,6 +1269,12 @@ Remember to output the final answer key as:
       liveText.textContent = msg.text || msg.phase;
       if (msg.phase === 'running') tabIndicator.className = 'tab-indicator running';
       else tabIndicator.className = 'tab-indicator';
+    } else if (msg.type === 'configUpdated') {
+      if (msg.config && msg.config.delayMs) {
+        currentDelayMs = msg.config.delayMs;
+        speedSlider.value = currentDelayMs;
+        speedDisplay.textContent = `${(currentDelayMs / 1000).toFixed(1)}s (${currentDelayMs}ms)`;
+      }
     } else if (msg.type === 'done') {
       liveDot.className = 'dot-status done';
       liveText.textContent = 'Completed';
@@ -1199,8 +1284,15 @@ Remember to output the final answer key as:
 
   // ── Hydration on Page Load ──────────────────────────────────────────────────
   chrome.storage.local.get(['autoassess_config', 'autoassess_extracted_questions', 'autoassess_batch_answers'], (data) => {
-    if (data.autoassess_config && data.autoassess_config.model) {
-      footerModel.textContent = `Model: ${data.autoassess_config.model.split('/').pop()}`;
+    if (data.autoassess_config) {
+      if (data.autoassess_config.model) {
+        footerModel.textContent = `Model: ${data.autoassess_config.model.split('/').pop()}`;
+      }
+      if (data.autoassess_config.delayMs) {
+        currentDelayMs = data.autoassess_config.delayMs;
+        speedSlider.value = currentDelayMs;
+        speedDisplay.textContent = `${(currentDelayMs / 1000).toFixed(1)}s (${currentDelayMs}ms)`;
+      }
     }
     if (data.autoassess_extracted_questions && data.autoassess_extracted_questions.promptText) {
       extractedPromptText = data.autoassess_extracted_questions.promptText;

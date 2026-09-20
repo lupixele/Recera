@@ -105,6 +105,18 @@ $('btnLiveReset').addEventListener('click', async () => {
   await sendBg('reset');
 });
 
+// ── Timing Slider (Direct In-Popup) ──────────────────────────────────────────
+$('popupSpeedSlider').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value, 10);
+  $('popupSpeedDisplay').textContent = `${(val / 1000).toFixed(1)}s (${val}ms)`;
+  chrome.storage.local.get(['autoassess_config'], (data) => {
+    const cfg = data.autoassess_config || {};
+    cfg.delayMs = val;
+    chrome.storage.local.set({ autoassess_config: cfg });
+  });
+  sendBg('saveConfig', { config: { delayMs: val } });
+});
+
 // ── Batch Mode: Step 1 - Extract All Questions ───────────────────────────────
 $('btnExtractAll').addEventListener('click', async () => {
   const btn = $('btnExtractAll');
@@ -347,8 +359,14 @@ chrome.runtime.onMessage.addListener((msg, _src, sendResp) => {
       const { session, config, extracted, batchAnswers } = res;
 
       $('brandTitle').textContent = 'Recera';
-      if (config && config.model) {
-        $('activeModelLabel').textContent = `Model: ${config.model.split('/').pop()}`;
+      if (config) {
+        if (config.model) {
+          $('activeModelLabel').textContent = `Model: ${config.model.split('/').pop()}`;
+        }
+        if (config.delayMs) {
+          $('popupSpeedSlider').value = config.delayMs;
+          $('popupSpeedDisplay').textContent = `${(config.delayMs / 1000).toFixed(1)}s (${config.delayMs}ms)`;
+        }
       }
 
       // Restore Extracted Questions

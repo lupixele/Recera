@@ -505,6 +505,14 @@ async function extractAllQuestions(tabId) {
       }
     }
 
+    // Re-navigate back to Question 1 so the user is at the start
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: domNavigateToQuestion,
+      args: [1],
+    }).catch(() => {});
+    await sleep(350);
+
     // Build the clean copyable prompt
     const promptText = buildBulkPrompt(allQuestions);
 
@@ -533,14 +541,21 @@ function buildBulkPrompt(questions) {
   let out = `Please solve all the following multiple-choice questions accurately.
 For EVERY question, provide the correct option letter (A, B, C, or D).
 
-Format your final output strictly as a list, one per line:
+IMPORTANT: Provide your final answer key inside a single triple-backtick markdown code block so it can be copied cleanly in one click, strictly formatted with one question per line:
+
+\`\`\`
 1. [Letter]
 2. [Letter]
+3. [Letter]
 ...
-(e.g.:
+\`\`\`
+
+Example:
+\`\`\`
 1. B
 2. A
-3. D)
+3. D
+\`\`\`
 
 Here are the questions:
 ==================================================\n\n`;
@@ -554,10 +569,12 @@ Here are the questions:
   });
 
   out += `==================================================
-Remember to output the final answer key as:
+Conclude your response with the answer key enclosed in a code block:
+\`\`\`
 1. [Letter]
 2. [Letter]
-...`;
+...
+\`\`\``;
 
   return out;
 }
@@ -854,7 +871,13 @@ chrome.runtime.onMessage.addListener((msg, _src, sendResp) => {
       case 'saveConfig':
         session.config = { ...session.config, ...msg.config };
         await chrome.storage.local.set({ [CONFIG_KEY]: session.config });
-        sendResp({ ok: true });
+        // Broadcast delay update to all tabs immediately
+        chrome.tabs.query({}, (tabs) => {
+          tabs.forEach((t) => {
+            if (t.id) chrome.tabs.sendMessage(t.id, { type: 'configUpdated', config: session.config }).catch(() => {});
+          });
+        });
+        sendResp({ ok: true, config: session.config });
         return;
     }
     sendResp({ ok: true });
