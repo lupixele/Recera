@@ -21,10 +21,14 @@
     Object.defineProperty(document, 'webkitHidden', { get: () => false, configurable: true });
   } catch (e) {}
 
-  // ── 2. Intercept Accidental Form Submissions (Prevents Page Reloads) ─────────
+  // ── 2. Intercept Header Search Form Submissions ONLY (Prevents Page Reloads) ──
+  // NEVER block the assessment submission form or any modal submit!
   document.addEventListener('submit', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+    const form = e.target;
+    if (form && (form.classList?.contains('search-form') || form.querySelector?.('.edublink-search-popup-field') || form.closest?.('header'))) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }, true);
 
   // ── 3. Embedded Slide-Out Drawer CSS ─────────────────────────────────────────
@@ -873,14 +877,13 @@
   function clickNext() {
     const card = document.querySelector('.card-body:has(input[type="radio"])') || document.querySelector('.card-body') || document;
     const buttons = Array.from(card.querySelectorAll('button[type="button"], button'));
-    
+      
     const nextBtn = buttons.find(b => {
       const txt = b.textContent.trim().toLowerCase();
       return (txt === 'next' || txt.includes('next')) && !b.disabled && !b.classList.contains('submit-button');
     });
 
     if (nextBtn) {
-      nextBtn.setAttribute('type', 'button');
       nextBtn.click();
       return 'next';
     }
@@ -891,7 +894,6 @@
     });
 
     if (submitBtn) {
-      submitBtn.setAttribute('type', 'button');
       submitBtn.click();
       return 'submit';
     }

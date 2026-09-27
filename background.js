@@ -233,7 +233,6 @@ function domClickNext() {
     });
 
     if (nextBtn) {
-      nextBtn.setAttribute('type', 'button');
       nextBtn.click();
       return { action: 'next', success: true };
     }
@@ -244,7 +243,6 @@ function domClickNext() {
     });
 
     if (submitBtn) {
-      submitBtn.setAttribute('type', 'button');
       submitBtn.click();
       return { action: 'submit', success: true };
     }
